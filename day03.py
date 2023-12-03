@@ -1,3 +1,4 @@
+import collections
 import dataclasses
 import enum
 import typing
@@ -15,16 +16,16 @@ def yield_data(filename: str) -> typing.Iterator[str]:
 DIGITS = "0123456789"
 BLANK = "."
 symbols = ""
+GEAR_SYMBOL = "*"
 
 
 class LocationType(enum.Enum):
     DIGIT = 0
     SYMBOL = 1
     BLANK = 3
-    OUT_OF_BOUNDS = 4
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Location:
     x: int
     y: int
@@ -58,6 +59,9 @@ class GridLocation:
         elif self.value in DIGITS:
             return LocationType.DIGIT
         return LocationType.SYMBOL
+
+    def is_gear(self) -> bool:
+        return self.value == GEAR_SYMBOL
 
 
 @dataclasses.dataclass
@@ -128,7 +132,7 @@ class Schematic:
     numbers: list[Number] = dataclasses.field(default_factory=list)
     number_builder: NumberBuilder = dataclasses.field(default_factory=NumberBuilder)
 
-    def add_charecter(self, character: str, location: Location) -> None:
+    def add_character(self, character: str, location: Location) -> None:
         if character.isdigit():
             self.number_builder.add_number_part(character, location)
             return
@@ -157,6 +161,33 @@ class Schematic:
 
         return total
 
+    def number_adjacent_gear_locations(self, number: Number) -> list[Location]:
+        locations: list[Location] = []
+        for location in number.neighbour_locations():
+            if not self.location_in_grid(location):
+                continue
+            grid_location = self.grid[location.y][location.x]
+            if grid_location.is_gear():
+                locations.append(location)
+        return locations
+
+    def gear_ratio_sum(self) -> int:
+        total = 0
+        gear_adjacent_numbers: collections.defaultdict[
+            Location, list[Number]
+        ] = collections.defaultdict(list)
+        for number in self.numbers:
+            gear_locations = self.number_adjacent_gear_locations(number)
+            for gear_location in gear_locations:
+                if number not in gear_adjacent_numbers[gear_location]:
+                    gear_adjacent_numbers[gear_location].append(number)
+
+        for value in gear_adjacent_numbers.values():
+            if len(value) == 2:
+                total += value[0].value * value[1].value
+
+        return total
+
     def location_in_grid(self, location: Location) -> bool:
         return all(
             (
@@ -181,7 +212,7 @@ def create_grid_locations(y_index: int, line: str, schematic: Schematic):
     for x_index, character in enumerate(line):
         location = Location(x_index, y_index)
         grid_location = GridLocation(location, character)
-        schematic.add_charecter(character, location)
+        schematic.add_character(character, location)
         grid_locations.append(grid_location)
     return grid_locations
 
@@ -198,8 +229,8 @@ def part_one(schematic: Schematic) -> int:
     return schematic.part_number_sum()
 
 
-def part_two():
-    return
+def part_two(schematic: Schematic):
+    return schematic.gear_ratio_sum()
 
 
 def main():
@@ -207,7 +238,7 @@ def main():
     schematic = create_schematic(data)
 
     print(f"Part one: {part_one(schematic)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two(schematic)}")
 
 
 if __name__ == "__main__":
