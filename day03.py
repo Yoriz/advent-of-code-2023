@@ -1,6 +1,6 @@
 import dataclasses
-import typing
 import enum
+import typing
 
 TEST_FILENAME = "day3_testdata.txt"
 FILENAME = "day3_data.txt"
@@ -29,6 +29,22 @@ class Location:
     x: int
     y: int
 
+    def neighbour_location(self, location_direction: "LocationDirection") -> "Location":
+        other_location: "Location" = location_direction.value
+        return Location(self.x + other_location.x, self.y + other_location.y)
+
+
+@enum.unique
+class LocationDirection(enum.Enum):
+    UP = Location(0, -1)
+    UP_RIGHT = Location(1, -1)
+    RIGHT = Location(1, 0)
+    DOWN_RIGHT = Location(1, 1)
+    DOWN = Location(0, 1)
+    DOWN_LEFT = Location(-1, 1)
+    LEFT = Location(-1, 0)
+    UP_LEFT = Location(-1, -1)
+
 
 @dataclasses.dataclass
 class GridLocation:
@@ -45,13 +61,45 @@ class GridLocation:
 
 
 @dataclasses.dataclass
-class PartNumber:
+class Number:
     value: int
     start_location: Location
 
+    def length(self) -> int:
+        return len(str(self.value))
+
+    def neighbour_locations(self) -> list[Location]:
+        current_location = self.start_location
+        locations: list[Location] = []
+
+        for location in (
+            LocationDirection.DOWN_LEFT,
+            LocationDirection.LEFT,
+            LocationDirection.UP_LEFT,
+        ):
+            locations.append(current_location.neighbour_location(location))
+
+        for _ in range(self.length() - 1):
+            current_location = current_location.neighbour_location(
+                LocationDirection.RIGHT
+            )
+            for location in (LocationDirection.UP_LEFT, LocationDirection.DOWN_LEFT):
+                locations.append(current_location.neighbour_location(location))
+
+        for location in (
+            LocationDirection.UP,
+            LocationDirection.UP_RIGHT,
+            LocationDirection.RIGHT,
+            LocationDirection.DOWN_RIGHT,
+            LocationDirection.DOWN,
+        ):
+            locations.append(current_location.neighbour_location(location))
+
+        return locations
+
 
 @dataclasses.dataclass
-class PartNumberBuilder:
+class NumberBuilder:
     start_location: typing.Optional[Location] = None
     number: str = ""
 
@@ -60,11 +108,11 @@ class PartNumberBuilder:
         if not self.start_location:
             self.start_location = location
 
-    def get_part_number(self) -> PartNumber:
+    def get_number(self) -> Number:
         if not self.start_location:
-            raise ValueError("Cannot create a PartNumber without a Location")
-        partnumber = PartNumber(int(self.number), self.start_location)
-        return partnumber
+            raise ValueError("Cannot create a Number without a Location")
+        number = Number(int(self.number), self.start_location)
+        return number
 
     def reset(self):
         self.start_location = None
@@ -77,22 +125,55 @@ Grid = list[list[GridLocation]]
 @dataclasses.dataclass
 class Schematic:
     grid: Grid = dataclasses.field(default_factory=list)
-    part_numbers: list[PartNumber] = dataclasses.field(default_factory=list)
-    part_number_builder: PartNumberBuilder = dataclasses.field(
-        default_factory=PartNumberBuilder
-    )
+    numbers: list[Number] = dataclasses.field(default_factory=list)
+    number_builder: NumberBuilder = dataclasses.field(default_factory=NumberBuilder)
 
     def add_charecter(self, character: str, location: Location) -> None:
         if character.isdigit():
-            self.part_number_builder.add_number_part(character, location)
+            self.number_builder.add_number_part(character, location)
             return
-        if self.part_number_builder.number:
+        if self.number_builder.number:
             self.add_builder_number()
 
     def add_builder_number(self) -> None:
-        part_number = self.part_number_builder.get_part_number()
-        self.part_numbers.append(part_number)
-        self.part_number_builder.reset()
+        part_number = self.number_builder.get_number()
+        self.numbers.append(part_number)
+        self.number_builder.reset()
+
+    def is_number_a_partnumber(self, number: Number) -> bool:
+        for location in number.neighbour_locations():
+            if not self.location_in_grid(location):
+                continue
+            grid_location = self.grid[location.y][location.x]
+            if grid_location.type == LocationType.SYMBOL:
+                return True
+        return False
+
+    def part_number_sum(self) -> int:
+        total = 0
+        for number in self.numbers:
+            if self.is_number_a_partnumber(number):
+                total += number.value
+
+        return total
+
+    def location_in_grid(self, location: Location) -> bool:
+        return all(
+            (
+                location.x > -1,
+                location.x < self.max_x_location + 1,
+                location.y > -1,
+                location.y < self.max_y_location + 1,
+            )
+        )
+
+    @property
+    def max_x_location(self) -> int:
+        return len(self.grid[0]) - 1
+
+    @property
+    def max_y_location(self) -> int:
+        return len(self.grid) - 1
 
 
 def create_grid_locations(y_index: int, line: str, schematic: Schematic):
@@ -113,8 +194,8 @@ def create_schematic(data: typing.Iterator[str]) -> Schematic:
     return schematic
 
 
-def part_one():
-    return
+def part_one(schematic: Schematic) -> int:
+    return schematic.part_number_sum()
 
 
 def part_two():
@@ -122,27 +203,11 @@ def part_two():
 
 
 def main():
-    data = yield_data(TEST_FILENAME)
+    data = yield_data(FILENAME)
     schematic = create_schematic(data)
-    print(schematic.part_numbers)
-    print(f"Part one: {part_one()}")
-    print(f"Part two: {part_two()}")
 
-""" Current output
-[PartNumber(
-    value=467, start_location=Location(x=0, y=0)),
-    PartNumber(value=114, start_location=Location(x=5, y=0)),
-    PartNumber(value=35, start_location=Location(x=2, y=2)),
-    PartNumber(value=633, start_location=Location(x=6, y=2)),
-    PartNumber(value=617, start_location=Location(x=0, y=4)),
-    PartNumber(value=58, start_location=Location(x=7, y=5)),
-    PartNumber(value=592, start_location=Location(x=2, y=6)),
-    PartNumber(value=755, start_location=Location(x=6, y=7)),
-    PartNumber(value=664, start_location=Location(x=1, y=9)),
-    PartNumber(value=598, start_location=Location(x=5, y=9))]
-Part one: None
-Part two: None
-"""
+    print(f"Part one: {part_one(schematic)}")
+    # print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
