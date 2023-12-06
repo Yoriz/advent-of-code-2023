@@ -72,15 +72,22 @@ def part_one(races: list[Race]) -> int:
     return result
 
 
-def part_two() -> int:
-    return 0
+def part_two(races: list[Race]) -> int:
+    time = ""
+    record_distance = ""
+    for race in races:
+        time = f"{time}{race.time}"
+        record_distance = f"{record_distance}{race.record_distance}"
+
+    race = Race(int(time), int(record_distance))
+    return race.number_of_ways_to_beat_record()
 
 
 def main():
     data = yield_data(FILENAME)
     races = create_races(data)
     print(f"Part one: {part_one(races)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two(races)}")
 
 
 if __name__ == "__main__":
