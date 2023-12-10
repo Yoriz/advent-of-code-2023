@@ -2,6 +2,7 @@ import collections
 import dataclasses
 import enum
 import itertools
+import operator
 import typing
 
 TEST_FILENAME = "day7_testdata.txt"
@@ -15,6 +16,7 @@ def yield_data(filename: str) -> typing.Iterator[str]:
 
 
 class CardType(enum.Enum):
+    JOKER = 1
     TWO = 2
     THREE = 3
     FOUR = 4
@@ -70,24 +72,54 @@ class Card:
 class Hand:
     cards: list[Card] = dataclasses.field(default_factory=list)
     bid: int = 0
+    jokers: bool = False
 
     def type(self) -> HandType:
-        counter = collections.Counter("".join(card.string for card in self.cards))
-        print(tuple(sorted(counter.values(), reverse=True)))
-        match tuple(sorted(counter.values(), reverse=True)):
-            case (5,):
+        counter: collections.Counter = collections.Counter(
+            "".join(card.string for card in self.cards)
+        )
+        match sorted(counter.items(), reverse=True, key=operator.itemgetter(1)):
+            case [(_, 5)]:
                 return HandType.FIVE_OF_A_KIND
-            case (4, 1):
+
+            case [(_, 4), (_, 1)]:
+                if all((self.jokers, counter["J"] == 1)):
+                    return HandType.FIVE_OF_A_KIND
+                if all((self.jokers, counter["J"] == 4)):
+                    return HandType.FIVE_OF_A_KIND
                 return HandType.FOUR_OF_A_KIND
-            case (3, 2):
+
+            case [(_, 3), (_, 2)]:
+                if all((self.jokers, counter["J"] == 2)):
+                    return HandType.FIVE_OF_A_KIND
+                if all((self.jokers, counter["J"] == 3)):
+                    return HandType.FIVE_OF_A_KIND
                 return HandType.FULL_HOUSE
-            case (3, 1, 1):
+
+            case [(_, 3), (_, 1), (_, 1)]:
+                if all((self.jokers, counter["J"] == 1)):
+                    return HandType.FOUR_OF_A_KIND
+                if all((self.jokers, counter["J"] == 3)):
+                    return HandType.FOUR_OF_A_KIND
                 return HandType.THREE_OF_A_KIND
-            case (2, 2, 1):
+
+            case [(_, 2), (_, 2), (_, 1)]:
+                if all((self.jokers, counter["J"] == 1)):
+                    return HandType.FULL_HOUSE
+                if all((self.jokers, counter["J"] == 2)):
+                    return HandType.FOUR_OF_A_KIND
                 return HandType.TWO_PAIR
-            case (2, 1, 1, 1):
+
+            case [(_, 2), (_, 1), (_, 1), (_, 1)]:
+                if all((self.jokers, counter["J"] == 1)):
+                    return HandType.THREE_OF_A_KIND
+                if all((self.jokers, counter["J"] == 2)):  # J25J4 T4JJ3
+                    return HandType.THREE_OF_A_KIND
                 return HandType.ONE_PAIR
+
             case _:
+                if all((self.jokers, counter["J"] == 1)):
+                    return HandType.ONE_PAIR
                 return HandType.HIGH_CARD
 
     def __lt__(self, other: "Hand") -> bool:
@@ -96,7 +128,7 @@ class Hand:
                 continue
             return card < othercard
 
-        print("Not sure so returning false")
+        print("Shouldn't get here so returning false")
         return False
 
     def __str__(self) -> str:
@@ -140,22 +172,27 @@ class HandTypeCollection:
         self.high_card.sort()
 
 
-def create_card(card_str: str) -> Card:
-    return Card(string_to_card_type[card_str], card_str)
+def create_card(card_str: str, jokers: bool = False) -> Card:
+    card_type = string_to_card_type[card_str]
+    if jokers and card_type == CardType.JACK:
+        card_type = CardType.JOKER
+    return Card(card_type, card_str)
 
 
-def create_hands(data: typing.Iterator) -> list[Hand]:
+def create_hands(data: typing.Iterator, jokers: bool = False) -> list[Hand]:
     hands: list[Hand] = []
     for line in data:
         cards_str, bid_str = line.split(" ")
-        cards = [create_card(card_str) for card_str in cards_str]
-        hand = Hand(cards, int(bid_str))
+        cards = [create_card(card_str, jokers) for card_str in cards_str]
+        hand = Hand(cards, int(bid_str), jokers)
         hands.append(hand)
 
     return hands
 
 
-def part_one(hands: list[Hand]) -> int:
+def part_one() -> int:
+    data = yield_data(FILENAME)
+    hands = create_hands(data)
     hand_type_collection = HandTypeCollection()
     for hand in hands:
         hand_type_collection.add_hand(hand)
@@ -175,22 +212,78 @@ def part_one(hands: list[Hand]) -> int:
         total_winning += hand.bid * rank
         rank += 1
 
-    for hand in hand_type_collection.full_house:
-        print(hand)
-
     return total_winning
 
 
 def part_two() -> int:
-    return 0
+    data = yield_data(FILENAME)
+    hands = create_hands(data, True)
+    hand_type_collection = HandTypeCollection()
+    for hand in hands:
+        hand_type_collection.add_hand(hand)
+    hand_type_collection.sort_collections()
+    rank = 1
+    total_winning = 0
+
+    for hand in itertools.chain(
+        hand_type_collection.high_card,
+        hand_type_collection.one_pair,
+        hand_type_collection.two_pair,
+        hand_type_collection.three_of_a_kind,
+        hand_type_collection.full_house,
+        hand_type_collection.four_of_a_kind,
+        hand_type_collection.five_of_a_kind,
+    ):
+        total_winning += hand.bid * rank
+        rank += 1
+
+    return total_winning
 
 
 def main():
-    data = yield_data(FILENAME)
-    hands = create_hands(data)
-    print(f"Part one: {part_one(hands)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part one: {part_one()}")
+    print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
     main()
+    # data = iter(
+    #     ("AAAAA 1", "AA8AA 2", "23332 3", "TTT98 4", "23432 5", "A23A4 6", "23456 7", "2345J 681")
+    # )
+    # hands = create_hands(data, True)
+    # for hand in hands:
+    #     print(hand.type())
+
+"""
+FIVE OF A KIND
+AAAAA
+
+FOUR OF A KIND
+AA8AA
+AAJAA -> FIVE OF A KIND
+JJ8JJ -> FIVE OF A KIND
+
+FULL HOUSE
+23332
+J333J -> FIVE OF A KIND
+2JJJ2 -> FIVE OF A KIND
+
+THREE OF A KIND
+TTT98
+TTTJ8 -> FOUR OF A KIND
+JJJ98 -> FOUR OF A KIND
+
+TWO PAIR
+23432
+23J32 -> FULL HOUSE
+J343J -> FOUR_OF_A_KIND
+
+ONE PAIR
+A23A4
+AJ3A4 -> THREE OF A KIND
+J23J4 -> THREE OF A KIND
+
+HIGH CARD
+23456
+2345J -> ONE PAIR
+"""
