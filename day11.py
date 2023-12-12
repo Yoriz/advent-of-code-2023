@@ -164,7 +164,7 @@ def create_image(data: typing.Iterator[str]) -> Image:
 
 
 def part_one() -> int:
-    data = yield_data(TEST_FILENAME)
+    data = yield_data(FILENAME)
     image = create_image(data)
     total = 0
     image.expand_galaxy()
