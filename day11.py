@@ -19,7 +19,7 @@ class LocationType(enum.Enum):
     OUT_OF_BOUNDS = "@"
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class Location:
     x: int
     y: int
@@ -90,68 +90,44 @@ class Image:
         return GridLocation(location, LocationType.EMPTY_SPACE.value)
 
     def find_empty_rows(self) -> list[int]:
-        empty_rows: list[int] = []
+        rows_with_galaxys = {location.y for location in self.galaxy_locations}
+        empty_rows = []
         for y_index in range(self.max_y_location + 1):
-            galaxy_found = False
-            for x_index in range(self.max_x_location + 1):
-                location = Location(x_index, y_index)
-                grid_location = self.get_grid_location(location)
-                if grid_location.type == LocationType.GALAXY:
-                    galaxy_found = True
-            if not galaxy_found:
+            if y_index not in rows_with_galaxys:
                 empty_rows.append(y_index)
 
         return empty_rows
 
     def find_empty_columns(self) -> list[int]:
-        empty_columns: list[int] = []
+        columns_with_galaxys = {location.x for location in self.galaxy_locations}
+        empty_columns = []
         for x_index in range(self.max_x_location + 1):
-            galaxy_found = False
-            for y_index in range(self.max_y_location + 1):
-                location = Location(x_index, y_index)
-                grid_location = self.get_grid_location(location)
-                if grid_location.type == LocationType.GALAXY:
-                    galaxy_found = True
-            if not galaxy_found:
+            if x_index not in columns_with_galaxys:
                 empty_columns.append(x_index)
 
         return empty_columns
 
-    def insert_empty_row(self, after_row_y: int) -> None:
-        for y_index in range(self.max_y_location, after_row_y, -1):
-            for x_index in range(self.max_x_location + 1):
-                location = Location(x_index, y_index)
-                grid_location = self.get_grid_location(location)
-                if grid_location.type == LocationType.GALAXY:
-                    list_index = self.galaxy_locations.index(location)
-                    new_location = Location(location.x, location.y + 1)
-                    # print(f"Current: {location}, New: {new_location}")
-                    self.galaxy_locations[list_index] = new_location
-        self.max_y_location += 1
+    def insert_empty_row(self, after_row_y: int, amount: int = 1) -> None:
+        for location in self.galaxy_locations:
+            if location.y > after_row_y:
+                location.y += amount
 
         return None
 
-    def insert_empty_column(self, after_column_x: int) -> None:
-        for x_index in range(self.max_x_location, after_column_x, -1):
-            for y_index in range(self.max_y_location + 1):
-                location = Location(x_index, y_index)
-                grid_location = self.get_grid_location(location)
-                if grid_location.type == LocationType.GALAXY:
-                    list_index = self.galaxy_locations.index(location)
-                    new_location = Location(location.x + 1, location.y)
-                    # print(f"Current: {location}, New: {new_location}")
-                    self.galaxy_locations[list_index] = new_location
-        self.max_x_location += 1
+    def insert_empty_column(self, after_column_x: int, amount: int = 1) -> None:
+        for location in self.galaxy_locations:
+            if location.x > after_column_x:
+                location.x += amount
 
         return None
 
-    def expand_galaxy(self) -> None:
+    def expand_galaxy(self, amount: int = 1) -> None:
         empty_rows = self.find_empty_rows()
-        for row in reversed(empty_rows):
-            self.insert_empty_row(row)
         empty_columns = self.find_empty_columns()
+        for row in reversed(empty_rows):
+            self.insert_empty_row(row, amount)
         for column in reversed(empty_columns):
-            self.insert_empty_column(column)
+            self.insert_empty_column(column, amount)
 
         return None
 
@@ -187,27 +163,31 @@ def create_image(data: typing.Iterator[str]) -> Image:
     return image
 
 
-def part_one(image: Image) -> int:
+def part_one() -> int:
+    data = yield_data(TEST_FILENAME)
+    image = create_image(data)
     total = 0
     image.expand_galaxy()
     for galaxy1, galaxy2 in itertools.combinations(image.galaxy_locations, 2):
         distance_between = galaxy1.distance_between(galaxy2)
-        # galaxy1_index = image.galaxy_locations.index(galaxy1) + 1
-        # galaxy2_index = image.galaxy_locations.index(galaxy2) + 1
-        # print(f"Between galaxy {galaxy1_index} {galaxy1} and galaxy {galaxy2_index} {galaxy2}: {distance_between}")
         total += distance_between
     return total
 
 
 def part_two() -> int:
-    return 0
+    data = yield_data(FILENAME)
+    image = create_image(data)
+    total = 0
+    image.expand_galaxy(999999)
+    for galaxy1, galaxy2 in itertools.combinations(image.galaxy_locations, 2):
+        distance_between = galaxy1.distance_between(galaxy2)
+        total += distance_between
+    return total
 
 
 def main():
-    data = yield_data(FILENAME)
-    image = create_image(data)
-    print(f"Part one: {part_one(image)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part one: {part_one()}")
+    print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
