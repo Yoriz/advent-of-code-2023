@@ -359,6 +359,21 @@ class Contraption:
     max_x_location: int = 0
     max_y_location: int = 0
 
+    def reset_light_beams(self) -> None:
+        self.light_beams = []
+        self.energised_locations = []
+        self.light_beam_moves = set()
+
+    def yield_all_starting_light_beams(self) -> typing.Iterator[LightBeam]:
+        for x in range(self.max_x_location + 1):
+            yield LightBeam(Location(x, 0), LocationDirection.DOWN)
+        for x in range(self.max_x_location + 1):
+            yield LightBeam(Location(x, self.max_y_location), LocationDirection.UP)
+        for y in range(self.max_y_location + 1):
+            yield LightBeam(Location(0, y), LocationDirection.RIGHT)
+        for y in range(self.max_y_location + 1):
+            yield LightBeam(Location(self.max_x_location, y), LocationDirection.LEFT)
+
     def add_grid_location(self, grid_location: GridLocationProtocol) -> None:
         match grid_location.type:
             case (
@@ -477,12 +492,27 @@ def part_one() -> int:
 
 
 def part_two() -> int:
-    return 0
+    max_total = 0
+    data = yield_data(FILENAME)
+    contraption = create_contraption(data)
+    for light_beam in contraption.yield_all_starting_light_beams():
+        print(light_beam)
+        contraption.reset_light_beams()
+        contraption.light_beams.append(light_beam)
+        contraption.energised_locations.append(light_beam.location)
+        while True:
+            contraption.move_light_beams()
+            if not contraption.light_beams:
+                break
+
+        total = contraption.energised_locations_total
+        max_total = max(max_total, total)
+    return max_total
 
 
 def main():
     print(f"Part one: {part_one()}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
