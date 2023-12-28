@@ -21,6 +21,7 @@ class LocationType(enum.Enum):
     SE_PIPE = "F"
     GROUND = "."
     STARTING_POSITION = "S"
+    ENCLOSED = "I"
     OUT_OF_BOUNDS = "@"
 
 
@@ -34,7 +35,7 @@ PIPES = (
 )
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(slots=True, frozen=True)
 class Location:
     x: int
     y: int
@@ -75,6 +76,7 @@ PIPE_LOCATION_DIRECTIONS: dict[LocationType, tuple[LocationDirection, ...]] = {
 class GridLocation:
     location: Location
     value: str
+    is_part_of_loop: bool = False
 
     @property
     def type(self) -> LocationType:
@@ -108,6 +110,7 @@ Grid = list[list[GridLocation]]
 class PipeMaze:
     grid: Grid = dataclasses.field(default_factory=list)
     starting_grid_location: GridLocation | None = None
+    str_is_only_loop: bool = True
 
     def get_neighbour_grid_location(
         self, grid_location: GridLocation, location_direction: LocationDirection
@@ -146,6 +149,11 @@ class PipeMaze:
                     and location_connection[0] in pipe_location_directions
                 ):
                     location_directions.append(location_direction)
+
+        for location_type, location_direction in PIPE_LOCATION_DIRECTIONS.items():
+            if set(location_direction) == set(location_directions):
+                self.starting_grid_location.value = location_type.value
+
         return location_directions
 
     def pipe_move_location_direction(
@@ -190,13 +198,81 @@ class PipeMaze:
         for grid_location_row in self.grid:
             line_str = ""
             for grid_location in grid_location_row:
-                line_str = f"{line_str}{grid_location.value}"
+                value = grid_location.value
+                if self.str_is_only_loop and not grid_location.is_part_of_loop:
+                    value = "."
+                line_str = f"{line_str}{value}"
             lines.append(line_str)
         if self.starting_grid_location:
             lines.append(
                 f"X: {self.starting_grid_location.location.x}, Y: {self.starting_grid_location.location.y}"
             )
         return "\n".join(lines)
+
+    def find_loop_steps(self) -> int:
+        starting_grid_location = self.starting_grid_location
+        if not starting_grid_location:
+            raise ValueError("No starting grid location")
+        steps = 1
+        starting_grid_location.is_part_of_loop = True
+
+        (
+            direction1_location_direction,
+            direction2_location_direction,
+        ) = self.possible_starting_location_directions()
+        direction1_grid_location = self.get_neighbour_grid_location(
+            starting_grid_location, direction1_location_direction
+        )
+        direction2_grid_location = self.get_neighbour_grid_location(
+            starting_grid_location, direction2_location_direction
+        )
+        direction1_grid_location.is_part_of_loop = True
+        direction2_grid_location.is_part_of_loop = True
+        # print(f"Step: {steps} direction1: {direction1_grid_location}")
+        # print(f"Step: {steps} direction2: {direction2_grid_location}")
+        while True:
+            direction1_location_direction = self.pipe_move_location_direction(
+                direction1_grid_location, direction1_location_direction
+            )
+            direction1_grid_location = self.get_neighbour_grid_location(
+                direction1_grid_location, direction1_location_direction
+            )
+            direction2_location_direction = self.pipe_move_location_direction(
+                direction2_grid_location, direction2_location_direction
+            )
+            direction2_grid_location = self.get_neighbour_grid_location(
+                direction2_grid_location, direction2_location_direction
+            )
+            steps += 1
+            direction1_grid_location.is_part_of_loop = True
+            direction2_grid_location.is_part_of_loop = True
+            # print(f"Step: {steps} direction1: {direction1_grid_location}")
+            # print(f"Step: {steps} direction2: {direction2_grid_location}")
+
+            if direction1_grid_location == direction2_grid_location:
+                break
+
+        return steps
+
+    def enclosed_count(self) -> int:
+        total = 0
+        for grid_location_row in self.grid:
+            inside_loop = False
+            left_grid_location_type = None
+            for grid_location in grid_location_row:
+                match [inside_loop, grid_location.is_part_of_loop, grid_location.type]:
+                    case [*_, True, LocationType.VETICAL_PIPE | LocationType.NE_PIPE | LocationType.SE_PIPE]:
+                        inside_loop = not inside_loop
+                        left_grid_location_type = grid_location.type
+                    case [*_, True, LocationType.NW_PIPE] if left_grid_location_type == LocationType.NE_PIPE:
+                        inside_loop = not inside_loop
+                    case [*_, True, LocationType.SW_PIPE] if left_grid_location_type == LocationType.SE_PIPE:
+                        inside_loop = not inside_loop
+                    case [True, False, *_]:
+                        total += 1
+                # print(f"{inside_loop=} {grid_location.value} {total=} {grid_location.location}")
+
+        return total
 
 
 def create_grid_locations(y_index: int, line: str, pipe_maze: PipeMaze):
@@ -219,55 +295,21 @@ def create_pipe_maze(data: typing.Iterator[str]) -> PipeMaze:
 
 
 def part_one(pipe_maze: PipeMaze) -> int:
-    starting_grid_location = pipe_maze.starting_grid_location
-    if not starting_grid_location:
-        raise ValueError("No starting grid location")
-    steps = 1
-
-    (
-        direction1_location_direction,
-        direction2_location_direction,
-    ) = pipe_maze.possible_starting_location_directions()
-    direction1_grid_location = pipe_maze.get_neighbour_grid_location(
-        starting_grid_location, direction1_location_direction
-    )
-    direction2_grid_location = pipe_maze.get_neighbour_grid_location(
-        starting_grid_location, direction2_location_direction
-    )
-    print(f"Step: {steps} direction1: {direction1_grid_location}")
-    print(f"Step: {steps} direction2: {direction2_grid_location}")
-    while True:
-        direction1_location_direction = pipe_maze.pipe_move_location_direction(
-            direction1_grid_location, direction1_location_direction
-        )
-        direction1_grid_location = pipe_maze.get_neighbour_grid_location(
-            direction1_grid_location, direction1_location_direction
-        )
-        direction2_location_direction = pipe_maze.pipe_move_location_direction(
-            direction2_grid_location, direction2_location_direction
-        )
-        direction2_grid_location = pipe_maze.get_neighbour_grid_location(
-            direction2_grid_location, direction2_location_direction
-        )
-        steps += 1
-        print(f"Step: {steps} direction1: {direction1_grid_location}")
-        print(f"Step: {steps} direction2: {direction2_grid_location}")
-
-        if direction1_grid_location == direction2_grid_location:
-            break
-
+    steps = pipe_maze.find_loop_steps()
     return steps
 
 
-def part_two() -> int:
-    return 0
+def part_two(pipe_maze: PipeMaze) -> int:
+    pipe_maze.find_loop_steps()
+    steps = pipe_maze.enclosed_count()
+    return steps
 
 
 def main():
     data = yield_data(FILENAME)
     pipe_maze = create_pipe_maze(data)
     print(f"Part one: {part_one(pipe_maze)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two(pipe_maze)}")
 
 
 if __name__ == "__main__":
