@@ -1,6 +1,7 @@
 import dataclasses
 import enum
 import itertools
+import math
 import typing
 
 TEST_FILENAME = "day8_testdata.txt"
@@ -40,30 +41,43 @@ class Map:
     def add_node(self, node: Node) -> None:
         self.nodes[node.name] = node
 
+    def starting_nodes(self) -> list[Node]:
+        return [node for node in self.nodes.values() if node.name[2] == "A"]
+
     def navigate_to_ZZZ(self) -> int:
         steps = 0
         current_node = self.nodes["AAA"]
         for direction in itertools.cycle(self.directions):
-            # print(f"Current Node: {current_node}, Direction: {direction}")
             destination_str = current_node.navigate(direction)
             destination_node = self.nodes[destination_str]
             steps += 1
-            # print(f"Destination Node: {destination_node}, Steps: {steps}")
             if destination_node.name == "ZZZ":
                 break
             current_node = destination_node
         return steps
 
+    def navigate_starting_nodes_to_all_ending_Z(self) -> int:
+        steps = 0
+        current_nodes = self.starting_nodes()
+        steps_to_end_node: list[int] = []
+        for direction in itertools.cycle(self.directions):
+            destination_nodes: list[Node] = []
+            if not current_nodes:
+                break
+            steps += 1
+            for current_node in current_nodes:
+                destination_str = current_node.navigate(direction)
+                destination_node = self.nodes[destination_str]
+                if destination_node.name[2] == "Z":
+                    steps_to_end_node.append(steps)
+                else:
+                    destination_nodes.append(destination_node)
 
-def part_one(map: Map) -> int:
-    steps = map.navigate_to_ZZZ()
-    return steps
+            current_nodes = destination_nodes
+            print(" ".join(node.name for node in current_nodes))
 
-
-def part_two() -> int:
-    data = yield_data(TEST_FILENAME)
-
-    return 0
+        steps = math.lcm(*steps_to_end_node)
+        return steps
 
 
 def create_map(data) -> Map:
@@ -79,12 +93,22 @@ def create_map(data) -> Map:
     return map
 
 
+def part_one(map: Map) -> int:
+    steps = map.navigate_to_ZZZ()
+    return steps
+
+
+def part_two(map: Map) -> int:
+    steps = map.navigate_starting_nodes_to_all_ending_Z()
+    return steps
+
+
 def main():
     data = yield_data(FILENAME)
     map = create_map(data)
 
     print(f"Part one: {part_one(map)}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two(map)}")
 
 
 if __name__ == "__main__":
