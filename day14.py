@@ -18,90 +18,141 @@ class LocationType(enum.Enum):
     EMPTY_SPACE = "."
     OUT_OF_BOUNDS = "@"
 
+    @classmethod
+    def convertor(cls, string: str) -> "LocationType":
+        for location_type in LocationType:
+            if location_type.value == string:
+                return location_type
+        raise ValueError("Invalid LocationType string")
 
-@dataclasses.dataclass
+
+@dataclasses.dataclass(slots=True, frozen=True, order=True)
 class Location:
     x: int
     y: int
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True, frozen=True)
 class GridLocation:
     location: Location
-    value: str
+    type: LocationType
 
     @property
-    def type(self) -> LocationType:
-        match self.value:
-            case LocationType.ROUND_ROCK.value:
-                return LocationType.ROUND_ROCK
-            case LocationType.CUBE_ROCK.value:
-                return LocationType.CUBE_ROCK
-            case LocationType.EMPTY_SPACE.value:
-                return LocationType.EMPTY_SPACE
-            case LocationType.OUT_OF_BOUNDS.value:
-                return LocationType.OUT_OF_BOUNDS
-            case _:
-                raise ValueError(f"Invalid type: {self.value}")
-
-    @property
-    def x(self) -> int:
-        return self.location.x
-
-    @x.setter
-    def x(self, value) -> None:
-        self.location.x = value
-
-    @property
-    def y(self) -> int:
-        return self.location.y
-
-    @y.setter
-    def y(self, value) -> None:
-        self.location.y = value
+    def value(self) -> str:
+        return self.type.value
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class Platform:
-    grid_locations: dict[tuple[int, int], GridLocation] = dataclasses.field(
+    grid_locations: dict[Location, GridLocation] = dataclasses.field(
         default_factory=dict
     )
     max_x_location: int = 0
     max_y_location: int = 0
 
-    def add_grid_location(self, grid_location: GridLocation) -> None:
-        match grid_location.type:
-            case LocationType.ROUND_ROCK | LocationType.CUBE_ROCK:
-                self.grid_locations[(grid_location.x, grid_location.y)] = grid_location
-        self.update_max_values(grid_location.location)
-
-        return None
-
-    def update_max_values(self, location: Location) -> None:
-        self.max_x_location = max(self.max_x_location, location.x)
-        self.max_y_location = max(self.max_y_location, location.y)
-
-    def get_grid_location(self, location: Location) -> GridLocation:
-        if not self.location_in_grid(location):
-            return GridLocation(location, LocationType.OUT_OF_BOUNDS.value)
-        return self.grid_locations.get(
-            (location.x, location.y),
-            GridLocation(location, LocationType.EMPTY_SPACE.value),
-        )
-
     def tilt_north(self) -> None:
+        new_grid_locations: list[GridLocation] = []
         for x_index in range(self.max_x_location + 1):
             fixed_y_index = -1
             for y_index in range(self.max_y_location + 1):
-                grid_location = self.get_grid_location(Location(x_index, y_index))
+                current_location = Location(x_index, y_index)
+                grid_location = self.get_grid_location(current_location)
+
                 match grid_location.type:
                     case LocationType.CUBE_ROCK:
-                        fixed_y_index = grid_location.y
+                        fixed_y_index = current_location.y
+
                     case LocationType.ROUND_ROCK:
-                        del self.grid_locations[(grid_location.x, grid_location.y)]
                         fixed_y_index += 1
-                        grid_location.y = fixed_y_index
-                        self.add_grid_location(grid_location)
+                        new_location = Location(current_location.x, fixed_y_index)
+                        if new_location == current_location:
+                            continue
+                        new_grid_location = GridLocation(
+                            new_location, grid_location.type
+                        )
+                        new_grid_locations.append(new_grid_location)
+                        self.remove_grid_location(current_location)
+
+        for grid_location in new_grid_locations:
+            self.add_grid_location(grid_location)
+
+    def tilt_south(self) -> None:
+        new_grid_locations: list[GridLocation] = []
+        for x_index in range(self.max_x_location + 1):
+            fixed_y_index = self.max_y_location + 1
+            for y_index in range(self.max_y_location, -1, -1):
+                current_location = Location(x_index, y_index)
+                grid_location = self.get_grid_location(current_location)
+
+                match grid_location.type:
+                    case LocationType.CUBE_ROCK:
+                        fixed_y_index = current_location.y
+
+                    case LocationType.ROUND_ROCK:
+                        fixed_y_index -= 1
+                        new_location = Location(current_location.x, fixed_y_index)
+                        if new_location == current_location:
+                            continue
+                        new_grid_location = GridLocation(
+                            new_location, grid_location.type
+                        )
+                        new_grid_locations.append(new_grid_location)
+                        self.remove_grid_location(current_location)
+
+        for grid_location in new_grid_locations:
+            self.add_grid_location(grid_location)
+
+    def tilt_west(self) -> None:
+        new_grid_locations: list[GridLocation] = []
+        for y_index in range(self.max_y_location + 1):
+            fixed_x_index = -1
+            for x_index in range(self.max_x_location + 1):
+                current_location = Location(x_index, y_index)
+                grid_location = self.get_grid_location(current_location)
+
+                match grid_location.type:
+                    case LocationType.CUBE_ROCK:
+                        fixed_x_index = current_location.x
+
+                    case LocationType.ROUND_ROCK:
+                        fixed_x_index += 1
+                        new_location = Location(fixed_x_index, current_location.y)
+                        if new_location == current_location:
+                            continue
+                        new_grid_location = GridLocation(
+                            new_location, grid_location.type
+                        )
+                        new_grid_locations.append(new_grid_location)
+                        self.remove_grid_location(current_location)
+
+        for grid_location in new_grid_locations:
+            self.add_grid_location(grid_location)
+
+    def tilt_east(self) -> None:
+        new_grid_locations: list[GridLocation] = []
+        for y_index in range(self.max_y_location + 1):
+            fixed_x_index = self.max_x_location + 1
+            for x_index in range(self.max_x_location, -1, -1):
+                current_location = Location(x_index, y_index)
+                grid_location = self.get_grid_location(current_location)
+
+                match grid_location.type:
+                    case LocationType.CUBE_ROCK:
+                        fixed_x_index = current_location.x
+
+                    case LocationType.ROUND_ROCK:
+                        fixed_x_index -= 1
+                        new_location = Location(fixed_x_index, current_location.y)
+                        if new_location == current_location:
+                            continue
+                        new_grid_location = GridLocation(
+                            new_location, grid_location.type
+                        )
+                        new_grid_locations.append(new_grid_location)
+                        self.remove_grid_location(current_location)
+
+        for grid_location in new_grid_locations:
+            self.add_grid_location(grid_location)
 
     def total_load_of_north_support(self) -> int:
         total = 0
@@ -114,6 +165,40 @@ class Platform:
             rock_load -= 1
 
         return total
+
+    def cycle(self) -> None:
+        self.tilt_north()
+        self.tilt_west()
+        self.tilt_south()
+        self.tilt_east()
+
+    def add_grid_location(self, grid_location: GridLocation) -> None:
+        match grid_location.type:
+            case LocationType.ROUND_ROCK | LocationType.CUBE_ROCK:
+                location = grid_location.location
+                self.grid_locations[location] = grid_location
+        self.update_max_values(grid_location.location)
+
+        return None
+
+    def remove_grid_location(self, location: Location) -> GridLocation:
+        if not self.location_in_grid(location):
+            return GridLocation(location, LocationType.OUT_OF_BOUNDS)
+        return self.grid_locations.pop(
+            location, GridLocation(location, LocationType.EMPTY_SPACE)
+        )
+
+    def update_max_values(self, location: Location) -> None:
+        self.max_x_location = max(self.max_x_location, location.x)
+        self.max_y_location = max(self.max_y_location, location.y)
+
+    def get_grid_location(self, location: Location) -> GridLocation:
+        if not self.location_in_grid(location):
+            return GridLocation(location, LocationType.OUT_OF_BOUNDS)
+        return self.grid_locations.get(
+            location,
+            GridLocation(location, LocationType.EMPTY_SPACE),
+        )
 
     def location_in_grid(self, location: Location) -> bool:
         return all(
@@ -136,13 +221,16 @@ class Platform:
             rows.append(row)
         return "\n".join(rows)
 
+    def __hash__(self) -> int:
+        return hash(frozenset(self.grid_locations.items()))
+
 
 def create_platform(data: typing.Iterator[str]) -> Platform:
     platform = Platform()
     for y_index, line in enumerate(data):
         for x_index, character in enumerate(line):
             location = Location(x_index, y_index)
-            grid_location = GridLocation(location, character)
+            grid_location = GridLocation(location, LocationType.convertor(character))
             platform.add_grid_location(grid_location)
     return platform
 
@@ -152,16 +240,42 @@ def part_one() -> int:
     platform = create_platform(data)
     platform.tilt_north()
     total = platform.total_load_of_north_support()
+
     return total
 
 
 def part_two() -> int:
-    return 0
+    data = yield_data(FILENAME)
+    platform = create_platform(data)
+    seen_states: set[int] = set()
+    seen_index: list[int] = []
+    seen_results: list[int] = []
+    result = 0
+    for cycle_number in range(1000000000):
+        platform.cycle()
+        total_load = platform.total_load_of_north_support()
+        # print(f"{cycle_number=} {total_load=}")
+        platform_hash = hash(platform)
+        if platform_hash in seen_states:
+            # print(f"At {cycle_number=} seen state before")
+            first_seen_index = seen_index.index(platform_hash)
+            cycle_length = cycle_number - first_seen_index
+            result_index = (
+                (1000000000 - first_seen_index) % cycle_length + first_seen_index - 1
+            )
+            result = seen_results[result_index]
+            break
+
+        seen_states.add(platform_hash)
+        seen_index.append(platform_hash)
+        seen_results.append(total_load)
+
+    return result
 
 
 def main():
     print(f"Part one: {part_one()}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
