@@ -77,6 +77,7 @@ class LocationMovements:
     facing_direction_count: int = 0
     history: list[Location] = dataclasses.field(default_factory=list)
     heat_loss_total: int = 0
+    ultra_crucibal: bool = False
 
     def get_copy(self) -> "LocationMovements":
         return LocationMovements(
@@ -86,11 +87,16 @@ class LocationMovements:
             self.facing_direction_count,
             self.history.copy(),
             self.heat_loss_total,
+            self.ultra_crucibal,
         )
 
     def available_movements(self, map: "Map") -> tuple[LocationMovement, ...]:
-        movements = [LocationMovement.LEFT_90_DEG, LocationMovement.RIGHT_90_DEG]
-        if self.facing_direction_count < 3:
+        max_forward = 3 if not self.ultra_crucibal else 10
+        if self.ultra_crucibal and self.facing_direction_count < 4:
+            movements = []
+        else:
+            movements = [LocationMovement.LEFT_90_DEG, LocationMovement.RIGHT_90_DEG]
+        if self.facing_direction_count < max_forward:
             movements.append(LocationMovement.FORWARD)
         possible_movements: list[LocationMovement] = []
         for movement in movements:
@@ -246,7 +252,7 @@ def create_prioritized_location_movement(
     # ) # finds target quick at index 23
 
     prioritized_location_movement = PrioritizedLocationMovement(
-        (heat_loss_total, distance), location_movements
+        (heat_loss_total, 0), location_movements
     )  # doesnt not find target in a good time
 
     # prioritized_location_movement = PrioritizedLocationMovement(
@@ -255,7 +261,7 @@ def create_prioritized_location_movement(
     return prioritized_location_movement
 
 
-def find_minimal_heat_loss_path(map: Map) -> int:
+def find_minimal_heat_loss_path(map: Map, ultra_crucibal: bool = False) -> int:
     minimal = float("inf")
     best = None
     seen_keys: set[tuple[int, int, LocationDirection, int]] = set()
@@ -263,7 +269,9 @@ def find_minimal_heat_loss_path(map: Map) -> int:
         PrioritizedLocationMovement
     ] = queue.PriorityQueue()
     target_location = Location(map.max_x_location, map.max_y_location)
-    location_movements = LocationMovements(LocationDirection.RIGHT, Location(0, 0))
+    location_movements = LocationMovements(
+        LocationDirection.RIGHT, Location(0, 0), ultra_crucibal=ultra_crucibal
+    )
     prioritized_location_movement = create_prioritized_location_movement(
         target_location, location_movements, map
     )
@@ -282,13 +290,16 @@ def find_minimal_heat_loss_path(map: Map) -> int:
             if new_location_movements.seen_key() in seen_keys:
                 continue
             if new_location_movements.current_location == target_location:
-                print(
-                    f"Found target at {index}, Heat loss total: {new_location_movements.heat_loss_total}"
-                )
-                if new_location_movements.heat_loss_total < minimal:
-                    minimal = new_location_movements.heat_loss_total
-                    best = new_location_movements
+                if ultra_crucibal and new_location_movements.facing_direction_count < 4:
                     continue
+                minimal = new_location_movements.heat_loss_total
+                print(f"Found target at {index}, Heat loss total: {minimal}")
+                return minimal
+                # # print(new_location_movements.map_show_visited(map))
+                # if new_location_movements.heat_loss_total < minimal:
+                #     minimal = new_location_movements.heat_loss_total
+                #     best = new_location_movements
+                #     continue
             seen_keys.add(new_location_movements.seen_key())
             prioritized_location_movement = create_prioritized_location_movement(
                 target_location, new_location_movements, map
@@ -297,6 +308,8 @@ def find_minimal_heat_loss_path(map: Map) -> int:
 
     if not best:
         print("target not found")
+    # else:
+    #     print(best.map_show_visited(map))
 
     return minimal
 
@@ -304,18 +317,20 @@ def find_minimal_heat_loss_path(map: Map) -> int:
 def part_one() -> int:
     data = yield_data(FILENAME)
     map = create_map(data)
-    # print(map)
     result = find_minimal_heat_loss_path(map)
     return result
 
 
 def part_two() -> int:
-    return 0
+    data = yield_data(FILENAME)
+    map = create_map(data)
+    result = find_minimal_heat_loss_path(map, True)
+    return result
 
 
 def main():
     print(f"Part one: {part_one()}")
-    # print(f"Part two: {part_two()}")
+    print(f"Part two: {part_two()}")
 
 
 if __name__ == "__main__":
